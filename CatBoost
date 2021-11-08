@@ -1,0 +1,123 @@
+#####CatBoost
+import pandas as pd
+import numpy as np
+import math
+import random
+import numpy as np
+import pandas as pd
+from xgboost import plot_tree
+import matplotlib.pyplot as plt
+from lightgbm import LGBMRegressor
+from sklearn.model_selection import KFold
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import r2_score
+from catboost import CatBoostRegressor
+from sklearn.model_selection import GridSearchCV,RandomizedSearchCV
+##load data
+data = pd.read_excel('Data.xlsx')
+data = np.array(data)
+X = data[ : , :5]
+Y = data[ : ,5].flatten()
+from sklearn.model_selection import train_test_split
+x_train,x_test,y_train,y_test = train_test_split(X,Y,train_size=0.85)
+##Hyperparameters optimization
+from catboost import CatBoostRegressor
+model = CatBoostRegressor(eval_metric='R2')
+
+grid = {'learning_rate': [i*0.01 for i in range(1,31)],
+        'depth': range(3,11),
+        'l2_leaf_reg': [1, 2, 3, 4, 5,6,7,8,9,10],
+        'iterations': range(100,1500,10)}
+
+randomized_search_result = model.randomized_search(grid,
+                                                   X=x_train,
+                                                   y=y_train,
+                                                   plot=True,
+                                                   scoring='r2',
+                                                   cv=5,
+                                                   shuffle=True,
+                                                   )
+##train model
+from catboost import CatBoostRegressor
+car = CatBoostRegressor(iterations=1290,
+                          learning_rate=0.1,
+                          depth=8,
+                       l2_leaf_reg=2)
+car.fit(x_train, y_train)
+y_predict = car.predict(x_test)
+y_predict1 = car.predict(x_train)
+error1=abs((y_test-y_predict)/y_test)
+print(y_predict)
+print(y_test)
+print(abs(error1))
+MSE1 = mean_squared_error(y_test,y_predict)
+RMSE1 = math.sqrt(MSE1)
+MSE2 = mean_squared_error(y_train,y_predict1)
+RMSE2 = math.sqrt(MSE2)
+
+R2 = r2_score(y_test,y_predict)
+n5 = len(y_test)
+mape5 = sum(np.abs((y_test - y_predict)/y_test))/n5*100
+n6 = len(y_train)
+mape6 = sum(np.abs((y_train - y_predict1)/y_train))/n6*100
+
+print(mape5,mape6)
+print(f'MSE的值为{MSE1},RMSE为{RMSE1},R2为{R2}')
+print(r2_score(y_train,y_predict1),RMSE2)
+##save data
+from openpyxl.workbook import Workbook
+from openpyxl.writer.excel import ExcelWriter
+wb = Workbook()
+ws = wb.active
+ws.title = u'catboost'
+data5=[y_predict,y_test,error1,y_predict1,y_train]
+i = 1
+r = 1
+for line in data5:
+    for col in range(1, len(line) + 1):
+        ColNum = r
+        ws.cell(row=r, column=col).value = line[col - 1]
+    i += 1
+    r += 1
+wb.save('test_catboost.xlsx')
+time_end=time.time()
+print('totally cost',time_end-time_start)
+##sub_cart tree
+import catboost
+from catboost import  Pool
+import numpy as np
+
+plot_gragh = car.plot_tree(
+    tree_idx=1289,
+    pool=None
+)
+plot_gragh.render('./tree1289') #.save('./tree.png')
+##importance of variables
+import matplotlib.pyplot as plt
+importances = car.get_feature_importance()
+total = 0
+for i in importances:
+    total += i
+
+Impt_Series = pd.Series(importances/total, index = data.iloc[:,:5].columns)
+print(Impt_Series)
+
+Impt_Series = Impt_Series.sort_values(ascending = True)
+
+print(Impt_Series)
+print(list(Impt_Series.index))
+Y = list(Impt_Series.index)
+
+plt.figure(figsize=(10,5))
+plt.barh(range(len(Y)),
+        Impt_Series.values,
+        tick_label = Y,
+        color = 'steelblue', 
+       )
+
+print(Impt_Series.values)
+# print()
+for y,x in enumerate(Impt_Series.values):
+    plt.text(x+0.0001,y,'%s' %round(x,3),va='center')
+plt.show()
