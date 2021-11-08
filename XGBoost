@@ -1,0 +1,139 @@
+#####XGBoost
+import math
+import random
+import numpy as np
+import pandas as pd
+from xgboost import plot_tree
+import matplotlib.pyplot as plt
+from lightgbm import LGBMRegressor
+from sklearn.model_selection import KFold
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import mean_squared_error 
+from sklearn.metrics import r2_score 
+from catboost import CatBoostRegressor
+from sklearn.model_selection import GridSearchCV,RandomizedSearchCV
+##load data
+data = pd.read_excel('Data.xlsx')
+data = np.array(data)
+X = data[ : , :5]
+Y = data[ : ,5].flatten()
+from sklearn.model_selection import train_test_split
+x_train,x_test,y_train,y_test = train_test_split(X,Y,train_size=0.85)
+##Hyperparameters optimization
+import random
+from xgboost import XGBRegressor
+from sklearn.model_selection import KFold
+paramgrid = {"learning_rate": [i*0.01 for i in range(1,31)],
+             "n_estimators" : range(100,1500,10),
+             "max_depth" : range(3,11),
+             "min_child_weight":range(1,10),
+             'subsample':[i*0.01 for i in range(80,100)],
+             'colsample_bytree':[i*0.1 for i in range(5,10)],
+             'reg_alpha':[i*0.1 for i in range(1,10)],
+             'reg_lambda':[i*0.1 for i in range(1,10)],
+             'gamma':[0,0.1]
+             }
+random.seed(1)
+from evolutionary_search import EvolutionaryAlgorithmSearchCV
+cv = EvolutionaryAlgorithmSearchCV(estimator=XGBRegressor(),
+                                  params=paramgrid, 
+                                   #scoring="neg_root_mean_squared_error", #RMSE
+                                   scoring="r2", #R2
+                                   cv=KFold(n_splits=5), 
+                                   verbose=1,
+                                   population_size=100, 
+                                   gene_mutation_prob=0.10, 
+                                   gene_crossover_prob=0.5, 
+                                   tournament_size=5, 
+                                   generations_number=100,
+                                   n_jobs=1
+                                 )
+cv.fit(x_train, y_train)
+#model=XGBRegressor(eval_metric='R2')
+#grid_search = RandomizedSearchCV(model, 
+           #                        paramgrid,
+           #                        cv=5,
+                                   #cv=KFold(n_splits=5), #交叉验证5折
+            #                        X=x_train,
+            #                        y=y_train,
+                                   #scoring="r2", #R2的
+             #                      plot=True)
+                             #   )
+#grid_search.fit(x_train, y_train)
+#print(grid_search.best_params_)
+#print(grid_search.best_estimator_)
+#print(grid_search.best_score_)
+##train model
+import time
+time_start=time.time()
+from xgboost import XGBRegressor
+xgst=XGBRegressor( colsample_bylevel=1,
+             colsample_bytree=0.8, gamma=0,
+             learning_rate=0.11,  max_depth=8,
+             min_child_weight=5, 
+             n_estimators=1060, 
+             #reg_alpha=0.4,
+             #reg_lambda=0.4, 
+             scale_pos_weight=1,
+             subsample=0.88,
+             )
+xgst.fit(x_train, y_train)
+y_predict1 = xgst.predict(x_train)
+y_predict = xgst.predict(x_test)
+error1=(y_test-y_predict)/y_test
+print(y_predict)
+print(y_test)
+print(abs(error1))
+MSE1 = mean_squared_error(y_test,y_predict)
+RMSE1 = math.sqrt(MSE1)
+MSE2 =  mean_squared_error(y_train,y_predict1)
+RMSE2= math.sqrt(MSE2)
+R2 = r2_score(y_test,y_predict)
+n1 = len(y_test)
+n2 = len(y_train)
+mape1 = sum(np.abs((y_test - y_predict)/y_test))/n1*100
+mape2 = sum(np.abs((y_train - y_predict1)/y_train))/n2*100
+print(mape1,mape2)
+print(f'MSE的值为{MSE1},RMSE为{RMSE1},R2为{R2}')
+print(r2_score(y_train,y_predict1),RMSE2)
+##save data
+from openpyxl.workbook import Workbook
+from openpyxl.writer.excel import ExcelWriter
+wb = Workbook()
+ws = wb.active
+ws.title = u'xgboost'
+data3=[y_predict,y_test,error1,y_predict1,y_train]
+i = 1
+r = 1
+for line in data3:
+    for col in range(1, len(line) + 1):
+        ColNum = r
+        ws.cell(row=r, column=col).value = line[col - 1]
+    i += 1
+    r += 1
+wb.save('test_xgboost.xlsx')
+time_end=time.time()
+print('totally cost',time_end-time_start)
+##sub_cart tree
+plot_tree(xgst)
+fig = plt.gcf()
+fig.set_size_inches(30, 15)
+##importance of variables
+importance = xgst.feature_importances_
+Impt_Series = pd.Series(importance, index = data.iloc[:,:5].columns)
+print(Impt_Series)
+Impt_Series = Impt_Series.sort_values(ascending = True)
+print(Impt_Series)
+print(list(Impt_Series.index))
+Y = list(Impt_Series.index)
+plt.figure(figsize=(10,5)) 
+plt.barh(range(len(Y)), 
+        Impt_Series.values, 
+        tick_label = Y, 
+        color = 'steelblue', 
+       )
+print(Impt_Series.values)
+# print()
+for y,x in enumerate(Impt_Series.values):
+    plt.text(x+0.0001,y,'%s' %round(x,3),va='center')
+plt.show()
