@@ -1,0 +1,92 @@
+#######LightGBM
+import pandas as pd
+import numpy as np
+import math
+from sklearn.model_selection import train_test_split
+import random
+from lightgbm import LGBMRegressor
+from sklearn.model_selection import KFold
+from sklearn.metrics import mean_squared_error 
+from sklearn.metrics import r2_score
+##load data
+data = pd.read_excel('Data.xlsx')
+data = np.array(data)
+X = data[ : , :5]
+Y = data[ : ,5: ].flatten()
+from sklearn.model_selection import train_test_split
+x_train,x_test,y_train,y_test = train_test_split(X,Y,train_size=0.85)
+##Hyperparameters optimization
+paramgrid = {"learning_rate": [i*0.01 for i in range(1,21)],
+             "n_estimators" : range(100,1100,100),
+             "max_depth" : range(3,11),
+             "min_child_weight":range(1,9)}
+random.seed(1)
+from evolutionary_search import EvolutionaryAlgorithmSearchCV
+cv = EvolutionaryAlgorithmSearchCV(estimator=LGBMRegressor(objective='regression'),
+                                   params=paramgrid, 
+                                   scoring="roc_auc", 
+                                   cv=KFold(n_splits=5), 
+                                   verbose=1,
+                                   population_size=50, 
+                                   gene_mutation_prob=0.10,
+                                   gene_crossover_prob=0.5, 
+                                   tournament_size=3, 
+                                   generations_number=5,
+                                   n_jobs=1)
+cv.fit(x_train, y_train)
+##train model 
+import lightgbm as lgb
+lgb_train = lgb.Dataset(x_train, y_train)
+lgb_eval = lgb.Dataset(x_test, y_test, reference=lgb_train)
+# specify your configurations as a dict
+params = {
+    'boosting_type': 'gbdt',
+    'objective': 'regression',
+    'metric': {'l2', 'l1'},
+    'num_leaves': 31,
+    'learning_rate': 0.05,
+    'feature_fraction': 0.9,
+    'bagging_fraction': 0.8,
+    'bagging_freq': 5,
+    'verbose': -1,
+    'max_depth': 3,
+    'min_child_weight': ,
+    'force_col_wise': 'true'
+}
+gbm = lgb.train(params,
+                lgb_train,
+                num_boost_round=100, #'num_iterations ' :100
+                valid_sets=lgb_eval,
+                early_stopping_rounds=5)
+
+y_predict = gbm.predict(x_test)
+MSE = mean_squared_error(y_test,y_predict)
+RMSE = math.sqrt(MSE)
+R2 = r2_score(y_test,y_predict)
+print(f'MSE的值为{MSE},RMSE为{RMSE},R2为{R2}')
+##sub_cart tree
+import matplotlib.pyplot as plt
+fig2 = plt.figure(figsize=(20, 20))
+ax = fig2.subplots()
+lgb.plot_tree(gbm, tree_index=1, ax=ax)
+plt.show()
+##importance of variables
+import matplotlib.pyplot as plt
+importance = gbm.feature_importance()/545
+Impt_Series = pd.Series(importance, index = data.iloc[:,:5].columns)
+print(Impt_Series)
+Impt_Series = Impt_Series.sort_values(ascending = True)
+print(Impt_Series)
+print(list(Impt_Series.index))
+Y = list(Impt_Series.index)
+plt.figure(figsize=(10,5))
+plt.barh(range(len(Y)), 
+        Impt_Series.values,
+        tick_label = Y, 
+        color = 'steelblue', 
+       )
+print(Impt_Series.values)
+# print()
+for y,x in enumerate(Impt_Series.values):
+    plt.text(x+0.0001,y,'%s' %round(x,3),va='center')
+plt.show()
